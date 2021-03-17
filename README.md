@@ -1,2 +1,2 @@
 # Apc-labs
-apk2 - MMX commands
+APC2 - MMX commands
