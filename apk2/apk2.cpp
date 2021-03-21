@@ -1,141 +1,122 @@
-﻿#include <iostream>
 #include <time.h>
-#define size 1500
-void randMatrix(int **matrix);
-void printMatrix(int **matrix);
+#include <iostream>
+#define size 1000
+#define count 10000
+void randMatrix(int** matrix);
+void printMatrix(int** matrix);
 void initMatrix(int*** matrix);
+void algorithm(int** matrix, int* sumArray);
+void optimization(int** matrix, int* sumArray);
+void withoutOptimization(int** matrix, int* sumArray);
 int main()
-{   
-        srand(time(0));
-        int* buffer;
-        int** matrix1=NULL , **matrix2=NULL;
-        initMatrix(&matrix1);
-        initMatrix(&matrix2);
-        randMatrix(matrix1);
-        randMatrix(matrix2);
-        int sum = 0;
-        int mult = 0;
-        int **matrix3=NULL;
-        initMatrix(&matrix3);
-        unsigned int start_time = clock();
-        for (int i = 0; i < size; i++) {
-            for (int k = 0; k < size; k++) {
-                sum = 0;
-                for (int j = 0; j < size; j++) {
-                    sum += matrix1[i][j] * matrix2[j][k];
-                }
-                matrix3[i][k] = sum;
-            }
-        }
-        printf("C - %lf\n",(clock()-start_time)/1000.0);
-        unsigned int start_time_assembler = clock();
+{
+    int** matrix = NULL;
+    int sumArray[size];
+    initMatrix(&matrix);
+    randMatrix(matrix);
+    int start = clock();
+    for (int c = 0; c < count; c++) {
+        optimization(matrix, sumArray);
+    }
+    int c_end = clock();
+    printf("C with optimization - %lf\n", (c_end - start) / 1000.0);
+    int startWithoutOpt = clock();
+    for (int c = 0; c < count; c++) {
+        withoutOptimization(matrix, sumArray);
+    }
+    int CWithoutOptEnd = clock();
+    printf("C without optimization - %lf\n", (CWithoutOptEnd - startWithoutOpt) / 1000.0);
+    for (int c = 0; c < count; c++) {
         _asm
         {
-            mov esi, matrix1
-            mov edi, matrix2
+            mov esi, matrix
+            xor edi, edi
             mov eax, 0
-            mov ecx, 0
             mov ebx, 0
             loop1:
-            cmp eax,size
-            je loop1Exit
-            mov buffer,eax
-                loop2:
-                    cmp ecx, size
-                    je loop2Exit
-                    mov sum, 0
-                        loop3 :
-                        cmp ebx, size
-                        je loop3Exit
-                        mov edx, [esi + eax * 4]
-                        mov edx, [edx + ebx * 4]
-                        mov eax,edx
-                        mov edx, [edi + ebx * 4]
-                        mov edx, [edx + ecx * 4]
-                        mul edx
-                        add sum,eax
-                        add ebx,1
-                        mov eax,buffer
-                        jmp loop3
+            cmp eax, size
+                je loop1Exit
+                mov sumArray[edi], 0
+                loop3 :
+                cmp ebx, size
+                je loop3Exit
+                mov edx, [esi + eax * 4]
+                mov edx, [edx + ebx * 4]
 
-                    loop3Exit :
-                        mov esi, matrix3
-                        mov esi, [esi + eax * 4]
-                        mov edx,sum
-                        mov [esi + ecx * 4],edx
-                        mov esi, matrix1
+                add sumArray[edi], edx
+                add ebx, 1
+                jmp loop3
 
-                    add ecx,1
-                    mov ebx,0
-                    jmp loop2
-                loop2Exit:
-                    add eax,1
-                    mov ecx,0
-                    jmp loop1
+                loop3Exit :
+            add edi, 4
+                add eax, 1
+                mov ebx, 0
+                jmp loop1
+
                 loop1Exit :
         }
-        printf("Assembler - %lf\n", (clock() - start_time_assembler) / 1000.0);
-        for (int i = 0; i < size; i++)
-        {
-            for (int j = 0; j < size; j++) {
-                int buffer = matrix2[i][j];
-                matrix2[i][j] = matrix2[j][i];
-                matrix2[j][i] = buffer;
-            }
-        }
-        time_t start_mmx = clock();
+    }
+    int asm_end = clock();
+    printf("ASM-%lf\n", (asm_end - CWithoutOptEnd) / 1000.0);
+    for (int c = 0; c < count; c++) {
         _asm
         {
+            mov esi, matrix
+            xor edi, edi
             mov eax, 0
-            mov ecx, 0
             mov ebx, 0
-            mov edi, matrix2
-            mov esi,matrix1
             loop1MMX:
             cmp eax, size
-            je finish
-            loop2MMX:
-            cmp ebx,size
-            je loop2Finish 
-            mov sum, 0
-            movq mm3, [sum]
-            xor edx,edx
-            loop4:
-            cmp ecx,size
-            je loop4End
-            mov edx, [esi + eax * 4]
-            movq mm0,[edx+ecx*4]
-            mov edx, [edi + ebx * 4]
-            movq mm1,[edx+ecx*4]
-            PMULLW mm0, mm1
-            movq mm3, mm0
-            psrlq mm0, 32
-            PADDD mm0, mm3
-            movd edx,mm0
-            add sum, edx
-            add ecx,2
-            jmp loop4
-            loop4End:
-            push edi
-            mov edi,matrix3
-            mov edi,matrix3
-            mov edi, [edi + eax * 4]
-            mov edx, sum
-            mov[edi + ebx * 4], edx
-            add ebx, 1
-            mov ecx, 0
-            pop edi
-            jmp loop2MMX 
-            loop2Finish :
-            add eax, 1
-            mov ebx, 0
-            jmp loop1MMX
-            finish:
+                je loop1MMXExit
+                mov sumArray[edi], 0
+                loop3MMX :
+                cmp ebx, size
+                je loop3MMXExit
+                mov edx, [esi + eax * 4]
+                movq mm0, [edx + ebx * 4]
+
+                movq mm1, mm0
+                psrlq mm0, 32
+                PADDD mm1, mm0
+                movd edx, mm1
+                add sumArray[edi], edx
+
+                add ebx, 2
+                jmp loop3MMX
+
+                loop3MMXExit :
+            add edi, 4
+                add eax, 1
+                mov ebx, 0
+                jmp loop1MMX
+
+                loop1MMXExit :
             emms
         }
-        printf("MMX - %lf\n",(clock()-start_mmx)/1000.0);
-        return 0;
+    }
+    int mmx_end = clock();
+    printf("MMX-%lf\n", (mmx_end - asm_end) / 1000.0);
+    return 0;
 
+}
+void optimization(int** matrix, int* sumArray)
+{
+    algorithm(matrix, sumArray);
+}
+#pragma optimize( "", off )
+void withoutOptimization(int** matrix, int* sumArray)
+{
+    algorithm(matrix, sumArray);
+}
+#pragma optimize( "", on )
+void algorithm(int** matrix, int* sumArray)
+{
+    for (int i = 0; i < size; i++) {
+        sumArray[i] = 0;
+        for (int j = 0; j < size; j++) {
+            sumArray[i] += matrix[i][j];
+        }
+    }
 }
 void randMatrix(int** matrix)
 {
